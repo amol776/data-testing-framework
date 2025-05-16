@@ -1,0 +1,15 @@
+streamlit==1.28.1
+pandas==2.1.2
+numpy==1.26.1
+great-expectations==0.17.19
+sqlalchemy==2.0.22
+pyodbc==4.0.39
+requests==2.31.0
+pyarrow==13.0.0
+pytest==7.4.3
+allure-pytest==2.13.2
+ydata-profiling==4.6.1
+dask[dataframe]==2023.10.1
+python-dotenv==1.0.0
+fastparquet==2023.10.1
+zipfile36==0.1.3
