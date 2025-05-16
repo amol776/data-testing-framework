@@ -1,0 +1,73 @@
+image: python:3.11
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+cache:
+  paths:
+    - .pip-cache/
+    - venv/
+
+stages:
+  - setup
+  - test
+  - report
+
+before_script:
+  - python -V
+  - python -m venv venv
+  - source venv/bin/activate
+  - pip install --upgrade pip
+
+setup:
+  stage: setup
+  script:
+    - cd streamlit_testing_framework
+    - pip install -r requirements.txt
+  artifacts:
+    paths:
+      - venv/
+    expire_in: 1 hour
+
+test:
+  stage: test
+  script:
+    - source venv/bin/activate
+    - cd streamlit_testing_framework
+    - pytest tests/test_framework.py --alluredir=./allure-results
+  artifacts:
+    paths:
+      - streamlit_testing_framework/allure-results/
+    expire_in: 1 week
+  dependencies:
+    - setup
+
+generate_report:
+  stage: report
+  script:
+    - source venv/bin/activate
+    - cd streamlit_testing_framework
+    - apt-get update && apt-get install -y default-jre
+    - curl -o allure-2.22.1.tgz -OL https://github.com/allure-framework/allure2/releases/download/2.22.1/allure-2.22.1.tgz
+    - tar -zxvf allure-2.22.1.tgz
+    - export PATH=$PATH:$PWD/allure-2.22.1/bin/
+    - allure generate allure-results --clean -o allure-report
+  artifacts:
+    paths:
+      - streamlit_testing_framework/allure-report/
+    expire_in: 1 week
+  dependencies:
+    - test
+
+pages:
+  stage: report
+  script:
+    - mkdir public
+    - cp -r streamlit_testing_framework/allure-report/* public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+  dependencies:
+    - generate_report
