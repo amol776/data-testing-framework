@@ -158,16 +158,22 @@ def perform_comparison(
 
         # Add column-specific expectations
         for column in common_columns:
-            if source_df[column].dtype in ['int64', 'float64']:
-                expectations.extend([
-                    ge_source.expect_column_values_to_be_in_type_list(column, ['INTEGER', 'FLOAT']),
-                    ge_target.expect_column_values_to_be_in_type_list(column, ['INTEGER', 'FLOAT'])
-                ])
-            elif source_df[column].dtype == 'object':
-                expectations.extend([
-                    ge_source.expect_column_values_to_be_in_type_list(column, ['STRING']),
-                    ge_target.expect_column_values_to_be_in_type_list(column, ['STRING'])
-                ])
+            print(f"Processing column: {column}, dtype: {source_df[column].dtype}")
+            try:
+                if source_df[column].dtype in ['int64', 'float64']:
+                    print(f"Adding numeric expectations for column: {column}")
+                    expectations.extend([
+                        ge_source.expect_column_values_to_be_of_type(column, "int64"),
+                        ge_target.expect_column_values_to_be_of_type(column, "int64")
+                    ])
+                else:
+                    print(f"Adding string expectations for column: {column}")
+                    expectations.extend([
+                        ge_source.expect_column_values_to_be_of_type(column, "object"),
+                        ge_target.expect_column_values_to_be_of_type(column, "object")
+                    ])
+            except Exception as e:
+                print(f"Error processing column {column}: {str(e)}")
 
         # Store expectation results
         results["data_quality"]["details"]["expectations"] = [
