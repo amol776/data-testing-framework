@@ -3,6 +3,25 @@ import pandas as pd
 import os
 from data_processor import load_data, perform_comparison
 from reports import generate_allure_report, generate_data_diff_report, generate_profiling_report
+from difflib import SequenceMatcher
+
+def get_column_similarity(col1: str, col2: str) -> float:
+    """Calculate similarity ratio between two column names"""
+    return SequenceMatcher(None, col1.lower(), col2.lower()).ratio()
+
+def auto_map_columns(source_cols: list, target_cols: list) -> dict:
+    """Automatically map columns based on name similarity"""
+    mapping = {}
+    for source_col in source_cols:
+        # Find the most similar target column
+        similarities = [(target_col, get_column_similarity(source_col, target_col)) 
+                       for target_col in target_cols]
+        best_match = max(similarities, key=lambda x: x[1])
+        
+        # If similarity is above threshold (0.6), add to mapping
+        if best_match[1] > 0.6:
+            mapping[source_col] = best_match[0]
+    return mapping
 
 def main():
     st.set_page_config(
@@ -16,6 +35,12 @@ def main():
     st.markdown("""
     This framework allows you to compare data from different sources and generate comprehensive test reports.
     """)
+
+    # Initialize session state for column mapping
+    if 'auto_mapping' not in st.session_state:
+        st.session_state.auto_mapping = {}
+    if 'ignored_columns' not in st.session_state:
+        st.session_state.ignored_columns = set()
 
     # Sidebar for source and target selection
     st.sidebar.header("Data Source Configuration")
@@ -80,9 +105,14 @@ def main():
             # Store column names in session state
             st.session_state.source_columns = source_data.columns.tolist()
             st.session_state.target_columns = target_data.columns.tolist()
+            
+            # Generate automatic mapping
+            st.session_state.auto_mapping = auto_map_columns(
+                st.session_state.source_columns,
+                st.session_state.target_columns
+            )
+            
             st.session_state.mapping_done = True
-
-            # Store DataFrames in session state
             st.session_state.source_data = source_data
             st.session_state.target_data = target_data
 
@@ -93,30 +123,56 @@ def main():
     if st.session_state.get('mapping_done', False):
         st.subheader("Column Mapping Configuration")
         
-        mapping = {}
-        ignored_columns = []
+        # Create three columns: one for checkboxes, one for source columns, one for target columns
+        check_col, source_col, target_col = st.columns([0.2, 0.4, 0.4])
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
+        with check_col:
+            st.write("Include")
+        with source_col:
             st.write("Source Columns")
-            for source_col in st.session_state.source_columns:
-                if not st.checkbox(f"Include {source_col}", value=True, key=f"src_{source_col}"):
-                    ignored_columns.append(source_col)
-                else:
-                    target_col = st.selectbox(
-                        f"Map {source_col} to:",
-                        [""] + st.session_state.target_columns,
-                        key=f"map_{source_col}"
-                    )
-                    if target_col:
-                        mapping[source_col] = target_col
-
-        with col2:
+        with target_col:
             st.write("Target Columns")
-            for target_col in st.session_state.target_columns:
-                if not st.checkbox(f"Include {target_col}", value=True, key=f"tgt_{target_col}"):
-                    ignored_columns.append(target_col)
+
+        # Initialize mapping dictionary
+        mapping = {}
+        ignored_columns = set()
+
+        # Display mapping rows
+        for source_col_name in st.session_state.source_columns:
+            check_col, src_col, tgt_col = st.columns([0.2, 0.4, 0.4])
+            
+            # Checkbox for including/excluding column
+            with check_col:
+                include = st.checkbox(
+                    "##",
+                    value=source_col_name not in st.session_state.ignored_columns,
+                    key=f"include_{source_col_name}"
+                )
+                if not include:
+                    ignored_columns.add(source_col_name)
+            
+            # Display source column name
+            with src_col:
+                st.write(source_col_name)
+            
+            # Target column selection with auto-mapping
+            with tgt_col:
+                default_idx = (
+                    st.session_state.target_columns.index(st.session_state.auto_mapping[source_col_name])
+                    if source_col_name in st.session_state.auto_mapping
+                    else 0
+                )
+                target_col_name = st.selectbox(
+                    "##",
+                    [""] + st.session_state.target_columns,
+                    index=default_idx + 1 if source_col_name in st.session_state.auto_mapping else 0,
+                    key=f"map_{source_col_name}"
+                )
+                if target_col_name:
+                    mapping[source_col_name] = target_col_name
+
+        # Update session state
+        st.session_state.ignored_columns = ignored_columns
 
         # Compare Button
         if st.button("Compare Data"):
@@ -127,7 +183,7 @@ def main():
                         st.session_state.source_data,
                         st.session_state.target_data,
                         mapping,
-                        ignored_columns
+                        list(ignored_columns)
                     )
 
                     # Generate reports
